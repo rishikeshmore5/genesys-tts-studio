@@ -29,16 +29,30 @@ const LANG_MAP = {
   'it-IT': 'it',
   'ko-KR': 'ko',
   'ja-JP': 'ja',
-  'zh-CN': 'zh', // Chinese (Simplified / Mandarin)
+  'zh-CN': 'zh',
   'hi-IN': 'hi',
   'mr-IN': 'mr'
 };
 
-/**
- * Universal text chunker:
- * Handles Western punctuation, spaces, full-width Japanese/Chinese punctuation (。、！？),
- * and hard-slices any string chunks exceeding 180 characters.
- */
+// Acoustic filter configurations for different voice personas
+// Rescaling input sample clock (asetrate) + tempo normalization (atempo) shifts vocal timbre
+const PERSONA_FILTERS = {
+  'standard': [],
+  'deep': [
+    'asetrate=44100*0.84', // Lowers pitch down for a deeper tone
+    'atempo=1.19'          // Restores standard speaking tempo
+  ],
+  'soft': [
+    'asetrate=44100*0.93', // Subtle lower shift
+    'atempo=0.92',         // Slower, calmer cadence
+    'lowpass=f=3200'       // Rolls off sharp sibilance for warmer sound
+  ],
+  'expressive': [
+    'asetrate=44100*1.12', // Slightly brighter/higher pitch
+    'atempo=0.89'          // Compensates pacing
+  ]
+};
+
 function splitTextUniversally(rawText, maxLength = 180) {
   const regex = /([^。、！？\.,\?!;: \n\r\t]+[。、！？\.,\?!;: \n\r\t]*)/gu;
   const matches = rawText.match(regex) || [rawText];
@@ -71,7 +85,7 @@ function splitTextUniversally(rawText, maxLength = 180) {
 }
 
 app.post('/api/generate-tts', async (req, res) => {
-  const { text, lang = 'en-US' } = req.body;
+  const { text, lang = 'en-US', persona = 'standard' } = req.body;
 
   if (!text || text.trim() === '') {
     return res.status(400).json({ error: 'Text prompt is required.' });
@@ -84,14 +98,14 @@ app.post('/api/generate-tts', async (req, res) => {
 
   console.log(`\n--- [NEW REQUEST] ---`);
   console.log(`Language: ${langCode} (${lang})`);
+  console.log(`Persona: ${persona}`);
   console.log(`Total Length: ${text.length} characters`);
 
   try {
-    // 1. Split text with universal punctuation support (including Chinese/Japanese)
+    // 1. Chunk and download speech segments over HTTPS
     const textChunks = splitTextUniversally(text, 180);
     console.log(`1. Processing ${textChunks.length} text chunk(s)...`);
 
-    // 2. Fetch base64 audio for each chunk in sequence
     const audioBuffers = [];
     for (let i = 0; i < textChunks.length; i++) {
       const chunkText = textChunks[i];
@@ -103,23 +117,29 @@ app.post('/api/generate-tts', async (req, res) => {
       audioBuffers.push(Buffer.from(base64Audio, 'base64'));
     }
 
-    // 3. Concatenate all audio segments into a single file
     const combinedBuffer = Buffer.concat(audioBuffers);
     await fs.promises.writeFile(rawMp3Path, combinedBuffer);
     console.log(`✓ Audio downloaded & concatenated (${combinedBuffer.length} bytes).`);
 
-    // 4. Transcode to Genesys Architect specification:
-    // 8000 Hz, 1-Channel Mono, 16-bit PCM (pcm_s16le)
-    console.log(`2. Transcoding to 8000Hz Mono 16-bit PCM WAV...`);
+    // 2. Transcode with persona filters to Genesys 8000Hz 16-bit Mono WAV
+    console.log(`2. Transcoding with [${persona}] persona filters...`);
+    const customFilters = PERSONA_FILTERS[persona] || PERSONA_FILTERS['standard'];
+
     await new Promise((resolve, reject) => {
-      ffmpeg(rawMp3Path)
-        .audioChannels(1)
-        .audioFrequency(8000)
-        .audioCodec('pcm_s16le')
+      let command = ffmpeg(rawMp3Path);
+
+      if (customFilters.length > 0) {
+        command = command.audioFilters(customFilters);
+      }
+
+      command
+        .audioChannels(1)              // Mono
+        .audioFrequency(8000)          // 8 kHz
+        .audioCodec('pcm_s16le')       // Signed 16-bit PCM
         .format('wav')
         .output(genesysWavPath)
         .on('end', () => {
-          console.log(`✓ Transcode successful.`);
+          console.log(`✓ Transcode completed with [${persona}] styling.`);
           resolve();
         })
         .on('error', (err) => {
@@ -129,16 +149,14 @@ app.post('/api/generate-tts', async (req, res) => {
         .run();
     });
 
-    // 5. Send file to browser
-    console.log(`3. Sending prompt WAV to client...`);
+    // 3. Send file to browser
     const wavBuffer = await fs.promises.readFile(genesysWavPath);
-
     res.setHeader('Content-Type', 'audio/wav');
-    res.setHeader('Content-Disposition', `attachment; filename="genesys_${langCode}_8k.wav"`);
+    res.setHeader('Content-Disposition', `attachment; filename="genesys_${langCode}_${persona}_8k.wav"`);
     res.send(wavBuffer);
     console.log(`✓ Delivered ${wavBuffer.length} bytes.`);
 
-    // Cleanup temp files safely
+    // Cleanup temp files
     setTimeout(() => {
       try {
         if (fs.existsSync(rawMp3Path)) fs.unlinkSync(rawMp3Path);
@@ -155,6 +173,6 @@ app.post('/api/generate-tts', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`\n======================================================`);
   console.log(`Telephony Studio running at: http://localhost:${PORT}`);
-  console.log(`Full Multilingual CJK & Unlimited Text Support active.`);
+  console.log(`Persona Engine & CJK Multilingual active.`);
   console.log(`======================================================\n`);
 });
