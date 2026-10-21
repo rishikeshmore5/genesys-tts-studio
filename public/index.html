@@ -1,1 +1,139 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Genesys Telephony TTS Studio</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --accent: #38bdf8;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 2rem 1rem; display: flex; justify-content: center; }
+    .card { width: 100%; max-width: 600px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; box-shadow: 0 10px 25px rgba(0,0,0,0.4); }
+    h1 { font-size: 1.4rem; color: var(--accent); margin-bottom: 0.4rem; }
+    p.desc { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.2rem; }
+    .badge { display: inline-block; background: #0c4a6e; color: #7dd3fc; border: 1px solid #0284c7; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin-bottom: 1.5rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-bottom: 0.4rem; margin-top: 1rem; }
+    select, textarea { width: 100%; background: #0b1120; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 0.75rem; font-size: 0.95rem; }
+    select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    textarea { height: 95px; resize: vertical; }
+    .presets { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .btn-preset { background: #334155; border: none; color: #e2e8f0; padding: 0.35rem 0.65rem; border-radius: 6px; font-size: 0.78rem; cursor: pointer; transition: background 0.15s; }
+    .btn-preset:hover { background: #475569; }
+    button.btn-primary { width: 100%; background: var(--accent); color: #0f172a; font-weight: bold; border: none; padding: 0.85rem; border-radius: 8px; font-size: 1rem; cursor: pointer; margin-top: 1.5rem; transition: opacity 0.2s; }
+    button.btn-primary:hover { opacity: 0.9; }
+    button.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .player-box { margin-top: 1.5rem; padding-top: 1.2rem; border-top: 1px solid var(--border); display: none; }
+    audio { width: 100%; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Telephony TTS Studio</h1>
+  <p class="desc">Free neural speech exported directly into Genesys Architect telephony specifications.</p>
+  <div class="badge">Genesys Standard: 8,000 Hz • 1-Ch Mono • Signed 16-bit PCM</div>
+
+  <label for="langSelect">Language & Neural Voice</label>
+  <select id="langSelect">
+    <option value="en-US">English (US) - Jenny</option>
+    <option value="es-ES">Spanish (Spain) - Elvira</option>
+    <option value="pt-BR">Portuguese (Brazil) - Francisca</option>
+    <option value="de-DE">German (Germany) - Katja</option>
+    <option value="fr-FR">French (France) - Denise</option>
+    <option value="it-IT">Italian (Italy) - Elsa</option>
+    <option value="ko-KR">Korean - SunHi</option>
+    <option value="ja-JP">Japanese - Nanami</option>
+    <option value="hi-IN">Hindi - Swara</option>
+    <option value="mr-IN">Marathi - Aarohi</option>
+  </select>
+
+  <label>Preset Phrases</label>
+  <div class="presets">
+    <button class="btn-preset" onclick="setPreset('en-US', 'Thank you. You have selected.')">English</button>
+    <button class="btn-preset" onclick="setPreset('es-ES', 'Gracias. Ha seleccionado.')">Spanish</button>
+    <button class="btn-preset" onclick="setPreset('pt-BR', 'Obrigado. Você selecionou.')">Portuguese</button>
+    <button class="btn-preset" onclick="setPreset('de-DE', 'Vielen Dank. Sie haben ausgewählt.')">German</button>
+    <button class="btn-preset" onclick="setPreset('fr-FR', 'Merci. Vous avez sélectionné.')">French</button>
+    <button class="btn-preset" onclick="setPreset('it-IT', 'Grazie. Ha selezionato.')">Italian</button>
+    <button class="btn-preset" onclick="setPreset('ko-KR', '감사합니다. 선택하신 항목은 다음과 같습니다.')">Korean</button>
+    <button class="btn-preset" onclick="setPreset('ja-JP', 'ありがとうございます。ご選択いただいたのはこちらです。')">Japanese</button>
+    <button class="btn-preset" onclick="setPreset('hi-IN', 'धन्यवाद। आपने चुना है।')">Hindi</button>
+    <button class="btn-preset" onclick="setPreset('mr-IN', 'धन्यवाद. आपण निवडले आहे.')">Marathi</button>
+  </div>
+
+  <label for="promptText">Prompt Script</label>
+  <textarea id="promptText">Thank you. You have selected.</textarea>
+
+  <button id="genBtn" class="btn-primary" onclick="generatePrompt()">Generate & Download Genesys WAV</button>
+
+  <div class="player-box" id="playerBox">
+    <label>Local Playback Preview</label>
+    <audio id="audioPreview" controls></audio>
+  </div>
+</div>
+
+<script>
+  function setPreset(langCode, text) {
+    document.getElementById('langSelect').value = langCode;
+    document.getElementById('promptText').value = text;
+  }
+
+  async function generatePrompt() {
+    const text = document.getElementById('promptText').value.trim();
+    const lang = document.getElementById('langSelect').value;
+    const btn = document.getElementById('genBtn');
+    const playerBox = document.getElementById('playerBox');
+    const audioPreview = document.getElementById('audioPreview');
+
+    if (!text) return alert('Please enter prompt text.');
+
+    btn.disabled = true;
+    btn.innerText = 'Encoding 8kHz Mono WAV...';
+
+    try {
+      const response = await fetch('/api/generate-tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, lang })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Server transcoding failed.');
+      }
+
+      // Receive the raw PCM WAV blob from backend
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+
+      // Playback in browser
+      audioPreview.src = downloadUrl;
+      playerBox.style.display = 'block';
+      audioPreview.play();
+
+      // Trigger download to user's computer
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `genesys_${lang}_8k.wav`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerText = 'Generate & Download Genesys WAV';
+    }
+  }
+</script>
+</body>
+  </html>
