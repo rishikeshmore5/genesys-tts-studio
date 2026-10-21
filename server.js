@@ -29,6 +29,7 @@ const LANG_MAP = {
   'it-IT': 'it',
   'ko-KR': 'ko',
   'ja-JP': 'ja',
+  'zh-CN': 'zh', // Chinese (Simplified / Mandarin)
   'hi-IN': 'hi',
   'mr-IN': 'mr'
 };
@@ -39,7 +40,6 @@ const LANG_MAP = {
  * and hard-slices any string chunks exceeding 180 characters.
  */
 function splitTextUniversally(rawText, maxLength = 180) {
-  // Regex splitting on both Western & CJK punctuation / newlines
   const regex = /([^。、！？\.,\?!;: \n\r\t]+[。、！？\.,\?!;: \n\r\t]*)/gu;
   const matches = rawText.match(regex) || [rawText];
   const chunks = [];
@@ -52,7 +52,6 @@ function splitTextUniversally(rawText, maxLength = 180) {
       if (currentChunk.trim().length > 0) {
         chunks.push(currentChunk.trim());
       }
-      // If a single segment without punctuation is still longer than maxLength, hard-slice it
       if (piece.length > maxLength) {
         for (let i = 0; i < piece.length; i += maxLength) {
           chunks.push(piece.slice(i, i + maxLength).trim());
@@ -88,7 +87,7 @@ app.post('/api/generate-tts', async (req, res) => {
   console.log(`Total Length: ${text.length} characters`);
 
   try {
-    // 1. Split text with universal punctuation support (including Japanese/Chinese)
+    // 1. Split text with universal punctuation support (including Chinese/Japanese)
     const textChunks = splitTextUniversally(text, 180);
     console.log(`1. Processing ${textChunks.length} text chunk(s)...`);
 
